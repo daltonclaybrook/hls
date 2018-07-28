@@ -70,7 +70,7 @@ final class PlaylistController {
     stateThread.async {
       self.state = .waitingToStitch
     }
-    return Response(http: HTTPResponse(status: .noContent), using: request.sharedContainer)
+    return Response(http: HTTPResponse(status: .ok), using: request.sharedContainer)
   }
 
   // MARK: - Media Playlist Fetching
