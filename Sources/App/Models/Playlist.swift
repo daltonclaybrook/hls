@@ -26,6 +26,22 @@ extension Playlist {
       return nil
       }.first
   }
+
+  var mediaSequence: Int {
+    for tag in tags {
+      guard case .sequence(let value) = tag else { continue }
+      return value
+    }
+    return 0
+  }
+
+  var discontinuitySequence: Int {
+    for tag in tags {
+      guard case .discontinuitySequence(let value) = tag else { continue }
+      return value
+    }
+    return 0
+  }
 }
 
 extension Playlist: ResponseEncodable {

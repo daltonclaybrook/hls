@@ -105,13 +105,20 @@ final class PlaylistController {
     let contentResponse = client.get(query.content)
     let stitchResponse = client.get(query.stitch)
 
-    let foo = contentResponse
+    return contentResponse
       .and(stitchResponse)
       .map { responses in
         let (contentResponse, stitchResponse) = responses
         let contentPlaylist = try self.parsePlaylist(from: contentResponse, url: query.content, expand: false)
         let stitchPlaylist = try self.parsePlaylist(from: stitchResponse, url: query.stitch, expand: true)
-        return 
+
+        var utility = PlaylistUtility(playlist: contentPlaylist)
+        utility.stitch(
+          playlist: stitchPlaylist,
+          atMediaSequence: mediaSequence,
+          withOriginalDiscontinuitySequence: discontinuitySequence
+        )
+        return utility.playlist
       }
   }
 

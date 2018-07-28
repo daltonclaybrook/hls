@@ -87,6 +87,53 @@ struct PlaylistUtility {
     }
   }
 
+  mutating func stitch(
+    playlist stitchPlaylist: Playlist,
+    atMediaSequence stitchSequence: Int,
+    withOriginalDiscontinuitySequence discontinuitySequence: Int
+  ) {
+    var segmentsToStitch = stitchPlaylist.tags.filter { $0.isSegmentInfo }
+    let mediaSequence = playlist.mediaSequence
+    let segmentsToRemove = min(max(0, mediaSequence - stitchSequence), segmentsToStitch.count)
+    segmentsToStitch.removeFirst(segmentsToRemove)
+
+    var hasInsertedDiscontinuity = segmentsToRemove != 0
+    var addToIndex = 0
+
+    var addToDiscontinuity = 0
+    if segmentsToRemove > 0 {
+      addToDiscontinuity += 1
+    }
+    if segmentsToStitch.isEmpty {
+      addToDiscontinuity += 1
+    }
+    if let indexOfDiscontinuitySequence = playlist.tags.index(where: { $0.isDiscontinuitySequence }) {
+      playlist.tags[indexOfDiscontinuitySequence] = .discontinuitySequence(discontinuitySequence + addToDiscontinuity)
+    }
+
+    zip(0..., playlist.tags).forEach { values in
+      let (index, tag) = values
+      let tagIndex = index + mediaSequence
+      guard
+        tag.isSegmentInfo,
+        tagIndex <= stitchSequence,
+        !segmentsToStitch.isEmpty
+      else { return }
+
+      if !hasInsertedDiscontinuity {
+        hasInsertedDiscontinuity = true
+        playlist.tags.insert(.discontinuity, at: index + addToIndex)
+        addToIndex += 1
+      }
+      let stitchSegment = segmentsToStitch.removeFirst()
+      playlist.tags[index + addToIndex] = stitchSegment
+
+      if segmentsToStitch.isEmpty {
+        playlist.tags.insert(.discontinuity, at: index + addToIndex)
+      }
+    }
+  }
+
   // MARK: Information
 
   func allSegments(fillingInterval: TimeInterval = TimeInterval.greatestFiniteMagnitude, addDiscontinuityMarkers: Bool = false, withKey key: EncryptionKey? = nil) -> [PlaylistTag] {
@@ -141,6 +188,24 @@ struct PlaylistUtility {
       return playlistURL.appendingPathComponent(tagURI.path).absoluteString
     } else {
       return uri
+    }
+  }
+}
+
+extension PlaylistTag {
+  var isSegmentInfo: Bool {
+    if case .segmentInfo = self {
+      return true
+    } else {
+      return false
+    }
+  }
+
+  var isDiscontinuitySequence: Bool {
+    if case .discontinuitySequence = self {
+      return true
+    } else {
+      return false
     }
   }
 }
