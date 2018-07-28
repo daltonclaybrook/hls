@@ -9,7 +9,6 @@
 import Foundation
 import Vapor
 
-//TODO: This should be a dumb model. A helper utility should be doing the mutations.
 public struct Playlist {
   var tags: [PlaylistTag]
 

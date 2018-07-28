@@ -13,54 +13,111 @@ enum PlaylistControllerError: Error {
   case unknown
 }
 
+enum StitchingState {
+  case notStitching
+  case waitingToStitch
+  case stitching(sequence: Int, discontinuity: Int)
+}
+
 final class PlaylistController {
   private let baseURL: String
+  private let stitchURL = "http://d2nob5kdy2t5a5.cloudfront.net/6ijfky34/vid/master.m3u8"
+  private var state: StitchingState = .notStitching
+  private let stateThread = DispatchQueue.global(qos: .default)
 
   init(baseURL: String) {
     self.baseURL = baseURL
   }
 
+  // MARK: - Endpoints
+
   func getMaster(_ request: Request) throws -> Future<Playlist> {
-    let contentURL = "http://d2nob5kdy2t5a5.cloudfront.net/brnufyko/vid/master.m3u8"
-    let stitchURL = "http://d2nob5kdy2t5a5.cloudfront.net/6ijfky34/vid/master.m3u8"
+    let query = try request.query.decode(MasterQuery.self)
 
     let client = try request.client()
-    let contentResponse = client.get(contentURL)
+    let contentResponse = client.get(query.content)
     let stitchResponse = client.get(stitchURL)
 
     return contentResponse.and(stitchResponse)
       .map { responses -> Playlist in
         let (contentResponse, stitchResponse) = responses
-        let contentPlaylist = try self.parsePlaylist(from: contentResponse, url: contentURL)
-        let stitchPlaylist = try self.parsePlaylist(from: stitchResponse, url: stitchURL)
+        let contentPlaylist = try self.parsePlaylist(from: contentResponse, url: query.content, expand: true)
+        let stitchPlaylist = try self.parsePlaylist(from: stitchResponse, url: self.stitchURL, expand: true)
         return try self.playlistByAssociating(content: contentPlaylist, withStitch: stitchPlaylist)
       }
   }
 
+  /// Returns a media playlist
+  ///
+  /// Tasks:
+  /// - Fetch the media playlist and the stitch playlist
+  /// -
   func getMedia(_ request: Request) throws -> Future<Playlist> {
     let query = try request.query.decode(MediaQuery.self)
-
     let client = try request.client()
+
+    switch state {
+    case .notStitching:
+      return fetchUnmodifiedMediaPlaylist(with: client, query: query)
+    case .waitingToStitch:
+      return fetchMediaPlaylistAndTransitionToStitching(with: client, query: query)
+    case let .stitching(sequence, discontinuity):
+      return fetchAndStitchMediaPlaylists(with: client, query: query, mediaSequence: sequence, discontinuitySequence: discontinuity)
+    }
+  }
+
+  func startStitching(_ request: Request) -> Response {
+    stateThread.async {
+      self.state = .waitingToStitch
+    }
+    return Response(http: HTTPResponse(status: .noContent), using: request.sharedContainer)
+  }
+
+  // MARK: - Media Playlist Fetching
+
+  private func fetchUnmodifiedMediaPlaylist(with client: Client, query: MediaQuery) -> Future<Playlist> {
+    return client.get(query.content)
+      .map { response in
+        guard let data = response.http.body.data else {
+          throw PlaylistControllerError.badPlaylistResponse
+        }
+        return try PlaylistParser().parse(playlistData: data)
+      }
+  }
+
+  private func fetchMediaPlaylistAndTransitionToStitching(with client: Client, query: MediaQuery) -> Future<Playlist> {
+    return fetchUnmodifiedMediaPlaylist(with: client, query: query)
+      .do { playlist in
+        let counts = PlaylistUtility(playlist: playlist).getCounts()
+        self.state = .stitching(
+          sequence: counts.mediaSequence + counts.segmentCount,
+          discontinuity: counts.discontinuitySequence
+        )
+      }
+  }
+
+  private func fetchAndStitchMediaPlaylists(
+    with client: Client,
+    query: MediaQuery,
+    mediaSequence: Int,
+    discontinuitySequence: Int
+  ) -> Future<Playlist> {
     let contentResponse = client.get(query.content)
     let stitchResponse = client.get(query.stitch)
 
-    return contentResponse.and(stitchResponse)
-      .map { responses -> Playlist in
+    let foo = contentResponse
+      .and(stitchResponse)
+      .map { responses in
         let (contentResponse, stitchResponse) = responses
-        let contentPlaylist = try self.parsePlaylist(from: contentResponse, url: query.content)
-        let stitchPlaylist = try self.parsePlaylist(from: stitchResponse, url: query.stitch)
-        return try self.playlistByInsertingTags(
-          fromStitch: stitchPlaylist,
-          stitchURL: query.stitch,
-          intoContent: contentPlaylist,
-          contentURL: query.content
-        )
+        let contentPlaylist = try self.parsePlaylist(from: contentResponse, url: query.content, expand: false)
+        let stitchPlaylist = try self.parsePlaylist(from: stitchResponse, url: query.stitch, expand: true)
+        return 
       }
   }
 
   // MARK: - Helpers
 
-  private func parsePlaylist(from response: Response, url: String) throws -> Playlist {
+  private func parsePlaylist(from response: Response, url: String, expand: Bool) throws -> Playlist {
     guard let data = response.http.body.data else {
       throw PlaylistControllerError.badPlaylistResponse
     }
@@ -68,7 +125,9 @@ final class PlaylistController {
     let parser = PlaylistParser()
     let playlist = try parser.parse(playlistData: data)
     var utility = PlaylistUtility(playlist: playlist)
-    try utility.expandURIsIfNecessary(withPlaylistURL: url)
+    if expand {
+      try utility.expandURIsIfNecessary(withPlaylistURL: url)
+    }
     return utility.playlist
   }
 

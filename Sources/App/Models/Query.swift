@@ -7,6 +7,10 @@
 
 import Foundation
 
+struct MasterQuery: Decodable {
+  let content: String
+}
+
 struct MediaQuery: Decodable {
   let content: String
   let stitch: String

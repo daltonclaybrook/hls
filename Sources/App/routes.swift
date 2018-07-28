@@ -17,4 +17,5 @@ public func routes(_ router: Router) throws {
   let playlistController = PlaylistController(baseURL: baseURL)
   router.get("master", use: playlistController.getMaster)
   router.get("media", use: playlistController.getMedia)
+  router.post("start-stitching", use: playlistController.startStitching)
 }

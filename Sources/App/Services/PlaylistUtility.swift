@@ -9,6 +9,12 @@
 import Foundation
 import Vapor
 
+struct MediaCounts {
+  let mediaSequence: Int
+  let discontinuitySequence: Int
+  let segmentCount: Int
+}
+
 struct PlaylistUtility {
 
   private(set) var playlist: Playlist
@@ -102,6 +108,29 @@ struct PlaylistUtility {
       segments.append(.key(key ?? .none))
     }
     return segments
+  }
+
+  func getCounts() -> MediaCounts {
+    var mediaSequence = 0
+    var discontinuitySequence = 0
+    var segmentCount = 0
+    playlist.tags.forEach { tag in
+      switch tag {
+      case let .sequence(value):
+        mediaSequence = value
+      case let .discontinuitySequence(value):
+        discontinuitySequence = value
+      case .segmentInfo:
+        segmentCount += 1
+      default:
+        break
+      }
+    }
+    return MediaCounts(
+      mediaSequence: mediaSequence,
+      discontinuitySequence: discontinuitySequence,
+      segmentCount: segmentCount
+    )
   }
 
   // MARK: Private
