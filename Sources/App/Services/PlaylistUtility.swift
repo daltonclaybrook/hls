@@ -111,12 +111,14 @@ struct PlaylistUtility {
       playlist.tags[indexOfDiscontinuitySequence] = .discontinuitySequence(discontinuitySequence + addToDiscontinuity)
     }
 
+    var tagIndex = -1
     zip(0..., playlist.tags).forEach { values in
       let (index, tag) = values
-      let tagIndex = index + mediaSequence
+      guard tag.isSegmentInfo else { return }
+      tagIndex += 1
+
       guard
-        tag.isSegmentInfo,
-        tagIndex <= stitchSequence,
+        tagIndex + mediaSequence >= stitchSequence,
         !segmentsToStitch.isEmpty
       else { return }
 
@@ -129,7 +131,7 @@ struct PlaylistUtility {
       playlist.tags[index + addToIndex] = stitchSegment
 
       if segmentsToStitch.isEmpty {
-        playlist.tags.insert(.discontinuity, at: index + addToIndex)
+        playlist.tags.insert(.discontinuity, at: index + addToIndex + 1)
       }
     }
   }
