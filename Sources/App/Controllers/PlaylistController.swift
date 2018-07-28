@@ -38,9 +38,24 @@ final class PlaylistController {
   }
 
   func getMedia(_ request: Request) throws -> Future<Playlist> {
-    let promise = request.eventLoop.newPromise(Playlist.self)
-    promise.fail(error: PlaylistControllerError.unknown)
-    return promise.futureResult
+    let query = try request.query.decode(MediaQuery.self)
+
+    let client = try request.client()
+    let contentResponse = client.get(query.content)
+    let stitchResponse = client.get(query.stitch)
+
+    return contentResponse.and(stitchResponse)
+      .map { responses -> Playlist in
+        let (contentResponse, stitchResponse) = responses
+        let contentPlaylist = try self.parsePlaylist(from: contentResponse, url: query.content)
+        let stitchPlaylist = try self.parsePlaylist(from: stitchResponse, url: query.stitch)
+        return try self.playlistByInsertingTags(
+          fromStitch: stitchPlaylist,
+          stitchURL: query.stitch,
+          intoContent: contentPlaylist,
+          contentURL: query.content
+        )
+      }
   }
 
   // MARK: - Helpers
@@ -55,6 +70,26 @@ final class PlaylistController {
     var utility = PlaylistUtility(playlist: playlist)
     try utility.expandURIsIfNecessary(withPlaylistURL: url)
     return utility.playlist
+  }
+
+  private func playlistByInsertingTags(
+    fromStitch stitchPlaylist: Playlist,
+    stitchURL: String,
+    intoContent contentPlaylist: Playlist,
+    contentURL: String
+  ) throws -> Playlist {
+    var contentUtility = PlaylistUtility(playlist: contentPlaylist)
+    var stitchUtility = PlaylistUtility(playlist: stitchPlaylist)
+
+    try contentUtility.expandURIsIfNecessary(withPlaylistURL: contentURL)
+    try stitchUtility.expandURIsIfNecessary(withPlaylistURL: stitchURL)
+
+    let insertionPoint: TimeInterval = 20
+    let tagsToInsert = stitchUtility.allSegments(addDiscontinuityMarkers: true, withKey: contentUtility.playlist.encryptionKey)
+    try contentUtility.insertTags(tagsToInsert, at: insertionPoint)
+    try contentUtility.correctTargetDurationIfNecessary()
+
+    return contentUtility.playlist
   }
 
   private func playlistByAssociating(content: Playlist, withStitch stitch: Playlist) throws -> Playlist {
