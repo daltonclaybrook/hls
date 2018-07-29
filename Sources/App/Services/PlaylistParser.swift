@@ -24,7 +24,7 @@ public final class PlaylistParser {
     let scanner = Scanner(string: playlistString)
 
     var tags = [PlaylistTag]()
-    while !scanner.ms_isAtEnd {
+    while !scanner.isAtEnd {
       guard let tag = scanTag(with: scanner) else { continue }
       tags.append(tag)
     }
@@ -73,19 +73,11 @@ extension Scanner {
 
   func ms_scanString(_ string: String) -> String? {
     #if os(Linux)
-    return scanString(string: string)
+    return scanString(string)
     #else
     var outString: NSString? = nil
     scanString(string, into: &outString)
     return outString as String?
-    #endif
-  }
-
-  var ms_isAtEnd: Bool {
-    #if os(Linux)
-    return atEnd
-    #else
-    return isAtEnd
     #endif
   }
 }

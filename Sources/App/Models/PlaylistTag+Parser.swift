@@ -167,7 +167,7 @@ extension Dictionary {
   init?(paramString: String) {
     var outDict = [Key:Value]()
     let scanner = Scanner(string: paramString)
-    while !scanner.ms_isAtEnd {
+    while !scanner.isAtEnd {
       guard let key = scanner.ms_scanUpToString("=") else { break }
       _ = scanner.ms_scanString("=")
       var value: String? = nil
