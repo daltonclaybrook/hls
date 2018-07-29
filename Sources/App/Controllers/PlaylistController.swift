@@ -10,6 +10,7 @@ import Vapor
 enum PlaylistControllerError: Error {
   case badPlaylistResponse
   case urlEncodingFailed
+  case liveURLNotSet
   case unknown
 }
 
@@ -24,6 +25,7 @@ final class PlaylistController {
   private let stitchURL = "http://d2nob5kdy2t5a5.cloudfront.net/6ijfky34/vid/master.m3u8"
   private var state: StitchingState = .notStitching
   private var liveStartDate = Date()
+  private var liveURL = ""
 
   init(baseURL: String) {
     self.baseURL = baseURL
@@ -66,18 +68,24 @@ final class PlaylistController {
     return Response(http: HTTPResponse(status: .ok), using: request.sharedContainer)
   }
 
-  func startLive(_ request: Request) -> Response {
-    liveStartDate = Date()
-    return Response(http: HTTPResponse(status: .ok), using: request.sharedContainer)
+  func startLive(_ request: Request) throws -> Future<Response> {
+    let payload = try request.content.decode(LiveURLPayload.self)
+    return payload.map { payload in
+      self.liveStartDate = Date()
+      self.liveURL = payload.liveURL
+      return Response(http: HTTPResponse(status: .ok), using: request.sharedContainer)
+    }
   }
 
   func getFakeLiveMaster(_ request: Request) throws -> Future<Playlist> {
-//    let query = try request.query.decode(MasterQuery.self)
-    let url = "http://secure-vh.akamaihd.net/i/vod/bike/07-2018/07282018-alex-5pm/07282018-alex-5pm_,2,4,6,8,13,20,30,60,00k.mp4.csmil/master.m3u8?hdnea=st=1532839211~exp=1532846411~acl=/*~hmac=d891af9482a9147af655e27d5b87389ca7cb9cb0b3e2b1a219bd5055cf699a4e"
+    guard !liveURL.isEmpty else {
+      throw PlaylistControllerError.liveURLNotSet
+    }
+
     let client = try request.client()
-    return client.get(url)
+    return client.get(liveURL)
       .map { response in
-        let playlist = try self.parsePlaylist(from: response, url: url, expand: true)
+        let playlist = try self.parsePlaylist(from: response, url: self.liveURL, expand: true)
         return try self.playlistByAddingProxyURLs(toPlaylist: playlist)
       }
   }

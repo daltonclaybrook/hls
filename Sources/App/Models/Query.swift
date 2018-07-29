@@ -15,3 +15,7 @@ struct MediaQuery: Decodable {
   let content: String
   let stitch: String
 }
+
+struct LiveURLPayload: Decodable {
+  let liveURL: String
+}
