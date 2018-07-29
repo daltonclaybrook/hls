@@ -1,3 +1,6 @@
 type: "vapor"
 swift_version: "4.1.0"
 run_parameters: "serve --port 8080 --hostname 0.0.0.0"
+config:
+    production:
+        BASE_URL: "https://hls-server.vapor.cloud"
