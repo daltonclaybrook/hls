@@ -91,7 +91,7 @@ struct PlaylistUtility {
     playlist stitchPlaylist: Playlist,
     atMediaSequence stitchSequence: Int,
     withOriginalDiscontinuitySequence discontinuitySequence: Int
-  ) {
+  ) throws {
     var segmentsToStitch = stitchPlaylist.tags.filter { $0.isSegmentInfo }
     let mediaSequence = playlist.mediaSequence
     let segmentsToRemove = min(max(0, mediaSequence - stitchSequence), segmentsToStitch.count)
@@ -134,6 +134,37 @@ struct PlaylistUtility {
         playlist.tags.insert(.discontinuity, at: index + addToIndex + 1)
       }
     }
+
+    try correctTargetDurationIfNecessary()
+  }
+
+  mutating func convertToLivePlaylist(withStartDate startDate: Date) {
+    let currentDate = Date()
+    let timeSinceStart = currentDate.timeIntervalSince(startDate)
+    let segments = playlist.tags.filter { $0.isSegmentInfo }
+
+    var startIndex = 0
+    var totalTime: TimeInterval = 0
+    for (index, segment) in zip(0..., segments) {
+      guard case let .segmentInfo(duration, _) = segment else { continue }
+      totalTime += duration
+      if totalTime >= timeSinceStart {
+        startIndex = index
+        break
+      }
+    }
+
+    let endIndex = min(startIndex + 10, segments.count)
+    let finalSegments = segments[startIndex..<endIndex]
+    var finalTags: [PlaylistTag] = [
+      .header,
+      .targetDuration(playlist.targetDuration),
+      .version(4),
+      .sequence(startIndex),
+      .discontinuitySequence(0)
+    ]
+    finalTags.append(contentsOf: finalSegments)
+    playlist.tags = finalTags
   }
 
   // MARK: Information

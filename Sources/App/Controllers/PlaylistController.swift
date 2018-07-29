@@ -23,7 +23,7 @@ final class PlaylistController {
   private let baseURL: String
   private let stitchURL = "http://d2nob5kdy2t5a5.cloudfront.net/6ijfky34/vid/master.m3u8"
   private var state: StitchingState = .notStitching
-  private let stateThread = DispatchQueue.global(qos: .default)
+  private var liveStartDate = Date()
 
   init(baseURL: String) {
     self.baseURL = baseURL
@@ -47,11 +47,6 @@ final class PlaylistController {
       }
   }
 
-  /// Returns a media playlist
-  ///
-  /// Tasks:
-  /// - Fetch the media playlist and the stitch playlist
-  /// -
   func getMedia(_ request: Request) throws -> Future<Playlist> {
     let query = try request.query.decode(MediaQuery.self)
     let client = try request.client()
@@ -67,10 +62,36 @@ final class PlaylistController {
   }
 
   func startStitching(_ request: Request) -> Response {
-    stateThread.async {
-      self.state = .waitingToStitch
-    }
+    self.state = .waitingToStitch
     return Response(http: HTTPResponse(status: .ok), using: request.sharedContainer)
+  }
+
+  func startLive(_ request: Request) -> Response {
+    liveStartDate = Date()
+    return Response(http: HTTPResponse(status: .ok), using: request.sharedContainer)
+  }
+
+  func getFakeLiveMaster(_ request: Request) throws -> Future<Playlist> {
+//    let query = try request.query.decode(MasterQuery.self)
+    let url = "http://secure-vh.akamaihd.net/i/vod/bike/07-2018/07282018-alex-5pm/07282018-alex-5pm_,2,4,6,8,13,20,30,60,00k.mp4.csmil/master.m3u8?hdnea=st=1532839211~exp=1532846411~acl=/*~hmac=d891af9482a9147af655e27d5b87389ca7cb9cb0b3e2b1a219bd5055cf699a4e"
+    let client = try request.client()
+    return client.get(url)
+      .map { response in
+        let playlist = try self.parsePlaylist(from: response, url: url, expand: true)
+        return try self.playlistByAddingProxyURLs(toPlaylist: playlist)
+      }
+  }
+
+  func getFakeLiveMedia(_ request: Request) throws -> Future<Playlist> {
+    let query = try request.query.decode(MasterQuery.self)
+    let client = try request.client()
+    return client.get(query.content)
+      .map { response in
+        let playlist = try self.parsePlaylist(from: response, url: query.content, expand: false)
+        var utility = PlaylistUtility(playlist: playlist)
+        utility.convertToLivePlaylist(withStartDate: self.liveStartDate)
+        return utility.playlist
+      }
   }
 
   // MARK: - Media Playlist Fetching
@@ -113,7 +134,7 @@ final class PlaylistController {
         let stitchPlaylist = try self.parsePlaylist(from: stitchResponse, url: query.stitch, expand: true)
 
         var utility = PlaylistUtility(playlist: contentPlaylist)
-        utility.stitch(
+        try utility.stitch(
           playlist: stitchPlaylist,
           atMediaSequence: mediaSequence,
           withOriginalDiscontinuitySequence: discontinuitySequence
@@ -172,6 +193,19 @@ final class PlaylistController {
       }
   }
 
+  private func playlistByAddingProxyURLs(toPlaylist: Playlist) throws -> Playlist {
+    return try zip(0..., toPlaylist.tags)
+      .reduce(toPlaylist) { playlist, tagPair in
+        let (index, tag) = tagPair
+        guard case let .streamInfo(info, uri) = tag else { return playlist }
+
+        var playlist = playlist
+        let fakeURL = try self.fakeLiveMediaURL(withURI: uri)
+        playlist.tags[index] = .streamInfo(info, uri: fakeURL)
+        return playlist
+      }
+  }
+
   private func stitchURIMatching(streamInfo: StreamInfo, fromStitchPlaylist stitch: Playlist) throws -> String {
     guard let contentBandwidth = streamInfo.bandwidth else { throw Abort.playlistError }
 
@@ -210,5 +244,12 @@ final class PlaylistController {
       let encodedStitch = stitchURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
     else { throw PlaylistControllerError.urlEncodingFailed }
     return "\(baseURL)/media?content=\(encodedContent)&stitch=\(encodedStitch)"
+  }
+
+  private func fakeLiveMediaURL(withURI uri: String) throws -> String {
+    guard let encodedURI = uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+      throw PlaylistControllerError.urlEncodingFailed
+    }
+    return "\(baseURL)/live/media?content=\(encodedURI)"
   }
 }

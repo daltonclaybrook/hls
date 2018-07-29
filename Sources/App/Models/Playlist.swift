@@ -42,6 +42,22 @@ extension Playlist {
     }
     return 0
   }
+
+  var targetDuration: Int {
+    for tag in tags {
+      guard case .targetDuration(let value) = tag else { continue }
+      return value
+    }
+    return 10
+  }
+
+  var version: Int {
+    for tag in tags {
+      guard case .version(let value) = tag else { continue }
+      return value
+    }
+    return 2
+  }
 }
 
 extension Playlist: ResponseEncodable {
