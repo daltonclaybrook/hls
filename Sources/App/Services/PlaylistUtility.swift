@@ -154,7 +154,7 @@ struct PlaylistUtility {
       }
     }
 
-    let endIndex = min(startIndex + 10, segments.count)
+    let endIndex = min(startIndex + 5, segments.count)
     let finalSegments = segments[startIndex..<endIndex]
     var finalTags: [PlaylistTag] = [
       .header,
