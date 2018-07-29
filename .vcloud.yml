@@ -1,0 +1,3 @@
+config:
+    production:
+        BASE_URL: "https://hls-server.vapor.cloud"

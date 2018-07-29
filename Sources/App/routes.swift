@@ -13,7 +13,7 @@ public func routes(_ router: Router) throws {
   router.post("todos", use: todoController.create)
   router.delete("todos", Todo.parameter, use: todoController.delete)
 
-  let baseURL = "http://localhost:8080"
+  let baseURL = Environment.get("BASE_URL") ?? "http://localhost:8080"
   let playlistController = PlaylistController(baseURL: baseURL)
   router.get("master", use: playlistController.getMaster)
   router.get("media", use: playlistController.getMedia)
