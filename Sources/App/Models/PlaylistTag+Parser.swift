@@ -9,39 +9,39 @@
 import Foundation
 
 extension StreamInfo {
-
-  public init(params: [String:String]) {
-    programID = params["PROGRAM-ID"].flatMap { Int($0) }
-    bandwidth = params["BANDWIDTH"].flatMap { Int($0) }
-    resolution = params["RESOLUTION"].flatMap { Resolution(string: $0) }
+  public init(params: [String: String]) {
+    programID = params["PROGRAM-ID"].flatMap(Int.init)
+    bandwidth = params["BANDWIDTH"].flatMap(Int.init)
+    resolution = params["RESOLUTION"].flatMap(Resolution.init)
     codecs = params["CODECS"]
   }
 
   public var stringValue: String {
-    var outString = ""
+    var outComponents: [String] = []
     // programID is deprecated, so we do not export it.
     if let bandwidth = bandwidth {
-      outString += "BANDWIDTH=\(bandwidth),"
+      outComponents.append("BANDWIDTH=\(bandwidth)")
     }
     if let resolution = resolution {
-      outString += "RESOLUTION=\(resolution.stringValue),"
+      outComponents.append("RESOLUTION=\(resolution.stringValue)")
     }
     if let codecs = codecs {
       // codecs has quotes around the value
-      outString += "CODECS=\"\(codecs)\","
+      outComponents.append("CODECS=\"\(codecs)\"")
     }
-    if !outString.isEmpty { _ = outString.removeLast() }
-    return outString
+    return outComponents.joined(separator: ",")
   }
 }
 
 extension Resolution {
-
   public init?(string: String) {
     let components = string.components(separatedBy: "x")
-    guard components.count == 2 else { return nil }
-    guard let width = Int(components[0]),
-      let height = Int(components[1]) else { return nil }
+    guard
+      components.count == 2,
+      let width = Int(components[0]),
+      let height = Int(components[1])
+    else { return nil }
+
     self.width = width
     self.height = height
   }
@@ -52,15 +52,14 @@ extension Resolution {
 }
 
 extension EncryptionKey {
-
-  public init(params: [String:String]) {
+  public init(params: [String: String]) {
     method = params["METHOD"]
     uri = params["URI"]
     iv = params["IV"]
   }
 
   public var stringValue: String {
-    var outComponents = [String]()
+    var outComponents: [String] = []
     if let method = method {
       outComponents.append("METHOD=\(method)")
     }
@@ -75,9 +74,8 @@ extension EncryptionKey {
 }
 
 extension PlaylistType {
-
   public init(components: [String]) {
-    self = components.first.flatMap { PlaylistType(rawValue: $0) } ?? .live
+    self = components.first.flatMap(PlaylistType.init) ?? .live
   }
 
   public var stringValue: String? {
@@ -89,9 +87,10 @@ extension PlaylistType {
 public extension PlaylistTag {
   public init?(components: [String], contents: String?) {
     guard components.count > 0 else { return nil }
+
     var components = components
     let name = components.removeFirst()
-    let params = components.first.flatMap { [String:String](paramString: $0) } ?? [:]
+    let params = components.first.flatMap { [String: String](paramString: $0) } ?? [:]
 
     switch name {
     case "EXTM3U":
@@ -101,15 +100,15 @@ public extension PlaylistTag {
         self = .streamInfo(StreamInfo(params: params), uri: uri)
       } else { return nil }
     case "EXT-X-VERSION":
-      if let version = components.first.flatMap({ Int($0) }) {
+      if let version = components.first.flatMap(Int.init) {
         self = .version(version)
       } else { return nil }
     case "EXT-X-MEDIA-SEQUENCE":
-      if let sequence = components.first.flatMap({ Int($0) }) {
+      if let sequence = components.first.flatMap(Int.init) {
         self = .sequence(sequence)
       } else { return nil }
     case "EXT-X-TARGETDURATION":
-      if let duration = components.first.flatMap({ Int($0) }) {
+      if let duration = components.first.flatMap(Int.init) {
         self = .targetDuration(duration)
       } else { return nil }
     case "EXT-X-KEY":
@@ -124,7 +123,7 @@ public extension PlaylistTag {
     case "EXT-X-DISCONTINUITY":
       self = .discontinuity
     case "EXT-X-DISCONTINUITY-SEQUENCE":
-      if let sequence = components.first.flatMap({ Int($0) }) {
+      if let sequence = components.first.flatMap(Int.init) {
         self = .discontinuitySequence(sequence)
       } else { return nil }
     case "EXT-X-PLAYLIST-TYPE":
@@ -138,26 +137,26 @@ public extension PlaylistTag {
     switch self {
     case .header:
       return "#EXTM3U"
-    case .streamInfo(let streamInfo, let uri):
+    case let .streamInfo(streamInfo, uri):
       return "#EXT-X-STREAM-INF:\(streamInfo.stringValue)\n\(uri)"
-    case .version(let version):
+    case let .version(version):
       return "#EXT-X-VERSION:\(version)"
-    case .sequence(let sequence):
+    case let .sequence(sequence):
       return "#EXT-X-MEDIA-SEQUENCE:\(sequence)"
-    case .targetDuration(let duration):
+    case let .targetDuration(duration):
       return "#EXT-X-TARGETDURATION:\(duration)"
-    case .key(let key):
+    case let .key(key):
       return "#EXT-X-KEY:\(key.stringValue)"
-    case .segmentInfo(let duration, let uri):
+    case let .segmentInfo(duration, uri):
       // these have a comma at the end of the tag line. This is how they come out of elastic transcoder.
       return "#EXTINF:\(duration),\n\(uri)"
     case .endList:
       return "#EXT-X-ENDLIST"
     case .discontinuity:
       return "#EXT-X-DISCONTINUITY"
-    case .discontinuitySequence(let sequence):
+    case let .discontinuitySequence(sequence):
       return "#EXT-X-DISCONTINUITY-SEQUENCE:\(sequence)"
-    case .playlistType(let type):
+    case let .playlistType(type):
       return type.stringValue.flatMap { "#EXT-X-PLAYLIST-TYPE:\($0)" } ?? ""
     }
   }
@@ -165,7 +164,7 @@ public extension PlaylistTag {
 
 extension Dictionary {
   init?(paramString: String) {
-    var outDict = [Key:Value]()
+    var outDict = [Key: Value]()
     let scanner = Scanner(string: paramString)
     while !scanner.isAtEnd {
       guard let key = scanner.ms_scanUpToString("=") else { break }
@@ -184,7 +183,7 @@ extension Dictionary {
       }
     }
 
-    if outDict.count > 0 {
+    if !outDict.isEmpty {
       self = outDict
     } else {
       return nil

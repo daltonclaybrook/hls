@@ -167,61 +167,39 @@ final class PlaylistController {
     return utility.playlist
   }
 
-  private func playlistByInsertingTags(
-    fromStitch stitchPlaylist: Playlist,
-    stitchURL: String,
-    intoContent contentPlaylist: Playlist,
-    contentURL: String
-  ) throws -> Playlist {
-    var contentUtility = PlaylistUtility(playlist: contentPlaylist)
-    var stitchUtility = PlaylistUtility(playlist: stitchPlaylist)
-
-    try contentUtility.expandURIsIfNecessary(withPlaylistURL: contentURL)
-    try stitchUtility.expandURIsIfNecessary(withPlaylistURL: stitchURL)
-
-    let insertionPoint: TimeInterval = 20
-    let tagsToInsert = stitchUtility.allSegments(addDiscontinuityMarkers: true, withKey: contentUtility.playlist.encryptionKey)
-    try contentUtility.insertTags(tagsToInsert, at: insertionPoint)
-    try contentUtility.correctTargetDurationIfNecessary()
-
-    return contentUtility.playlist
-  }
-
   private func playlistByAssociating(content: Playlist, withStitch stitch: Playlist) throws -> Playlist {
     return try zip(0..., content.tags)
-      .reduce(content) { playlist, tagPair in
+      .reduce(into: content) { playlist, tagPair in
         let (index, tag) = tagPair
-        guard case .streamInfo(let info, let uri) = tag else { return playlist }
+        guard case let .streamInfo(info, uri) = tag else { return }
 
-        var playlist = playlist
         let stitchURI = try stitchURIMatching(streamInfo: info, fromStitchPlaylist: stitch)
         let fullURL = try fullMediaURL(withContentURI: uri, stitchURI: stitchURI)
         playlist.tags[index] = .streamInfo(info, uri: fullURL)
-        return playlist
       }
   }
 
   private func playlistByAddingProxyURLs(toPlaylist: Playlist) throws -> Playlist {
     return try zip(0..., toPlaylist.tags)
-      .reduce(toPlaylist) { playlist, tagPair in
+      .reduce(into: toPlaylist) { playlist, tagPair in
         let (index, tag) = tagPair
-        guard case let .streamInfo(info, uri) = tag else { return playlist }
+        guard case let .streamInfo(info, uri) = tag else { return }
 
-        var playlist = playlist
         let fakeURL = try self.fakeLiveMediaURL(withURI: uri)
         playlist.tags[index] = .streamInfo(info, uri: fakeURL)
-        return playlist
       }
   }
 
   private func stitchURIMatching(streamInfo: StreamInfo, fromStitchPlaylist stitch: Playlist) throws -> String {
-    guard let contentBandwidth = streamInfo.bandwidth else { throw Abort.playlistError }
+    guard let contentBandwidth = streamInfo.bandwidth else {
+      throw Abort.playlistError
+    }
 
-    var closestInfo: (StreamInfo, String)?
+    var closestInfo: (info: StreamInfo, uri: String)?
     try stitch.tags.forEach { tag in
-      guard case .streamInfo(let info, let uri) = tag else { return }
+      guard case let .streamInfo(info, uri) = tag else { return }
       if let closest = closestInfo {
-        guard let closestBandwidth = closest.0.bandwidth,
+        guard let closestBandwidth = closest.info.bandwidth,
           let competingBandwidth = info.bandwidth else { throw Abort.playlistError }
 
         if competingBandwidth > contentBandwidth && closestBandwidth <= contentBandwidth {
@@ -239,7 +217,7 @@ final class PlaylistController {
       }
     }
 
-    if let stitchURI = closestInfo?.1 {
+    if let stitchURI = closestInfo?.uri {
       return stitchURI
     } else {
       throw Abort.playlistError
